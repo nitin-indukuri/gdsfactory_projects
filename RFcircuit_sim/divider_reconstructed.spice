@@ -1,0 +1,10 @@
+* Generated from gdsfactory YAML
+
+* sch_x=0 sch_y=0 sch_r=None
+Rr_top vin vout rsil w=0.5 l=10
+* sch_x=30 sch_y=0 sch_r=None
+Rr_bottom vout gnd rsil w=0.5 l=5
+
+* IHP models from cell VLSIR metadata
+.lib 'resistors_mod.lib'  ; rsil (SUBCKT)
+.end

@@ -1,0 +1,20 @@
+--- NETLIST FOR amp ---
+Generated on: 2026-02-28
+
+EXTERNAL INTERFACE (PINS):
+  Port: GND        -> Connected to: q1,E
+  Port: RFIN       -> Connected to: c_in,PLUS
+  Port: RFOUT      -> Connected to: c_out,MINUS
+  Port: VBIAS      -> Connected to: r_bias,P1
+  Port: VCC        -> Connected to: q1,C
+
+INSTANCES:
+  Device: Unnamed_67   Type: Unnamed_67      Connections: 
+  Device: Unnamed_92   Type: Unnamed_92      Connections: 
+  Device: Unnamed_97   Type: Unnamed_97      Connections: 
+  Device: c_in         Type: cmim            Connections: 
+  Device: c_out        Type: cmim            Connections: 
+  Device: q1           Type: npn13G2         Connections: 
+  Device: r_bias       Type: rsil            Connections: 
+
+--- END OF NETLIST ---

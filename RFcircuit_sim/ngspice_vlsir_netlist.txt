@@ -1,0 +1,9 @@
+* RF Circuit Extracted via GDSFactory VLSIR Metadata
+.lib '/path/to/ihp/sg13g2.lib' tt
+
+.subckt Unnamed_0 RFIN RFOUT VBIAS VCC GND
+Xc_in RFIN 0 cap_cmim w=0.0 l=0.0
+Xc_out 0 RFOUT cap_cmim w=0.0 l=0.0
+Xq1 VCC 0 GND 0 npn13G2 Nx=1 Ny=1 we=0.0 le=0.0
+Xr_bias 0 0 0 rsil w=0.0 l=0.0 m=1
+.ends

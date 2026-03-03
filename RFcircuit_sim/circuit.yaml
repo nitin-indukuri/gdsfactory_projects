@@ -1,0 +1,55 @@
+instances:
+  # The IHP BJT (HBT) - usually preferred for RF/220GHz
+  q1:
+    component: npn13G2
+    settings:
+      Nx: 1    # Number of fingers
+  
+  c_in:
+    component: cmim
+    settings: {w: 10, l: 10}
+  
+  c_out:
+    component: cmim
+    settings: {w: 10, l: 10}
+
+  r_bias:
+    component: rsil
+    settings: {dx: 0.5, dy: 20}
+
+placements:
+  c_in: {x: 0, y: 0}
+  q1: {x: 20, y: 0}       # 50um gap for auto-taper
+  c_out: {x: 40, y: 0}
+  r_bias: {x: 20, y: 20}
+
+routes:
+  # GDSFactory calculates distance and widths automatically here
+  input_to_base:
+    links:
+      c_in,MINUS: q1,B
+    routing_strategy: bridge_strategy
+    #settings:
+    #  taper: {component: taper} # Auto-calculates length and width
+  
+  coll_to_out:
+    links:
+      q1,C: c_out,PLUS
+    routing_strategy: bridge_strategy
+    #settings:
+    #  taper: {component: taper}
+
+  bias_to_base:
+    links:
+      r_bias,P2: q1,B
+    routing_strategy: bridge_strategy
+    #settings:
+    #  taper: {component: taper}
+
+ports:
+  # Map physical ports to Top-Level Pins for Netlist Extraction
+  RFIN: c_in,PLUS
+  RFOUT: c_out,MINUS
+  VBIAS: r_bias,P1
+  VCC: q1,C  # Direct tap for bias or use another resistor
+  GND: q1,E

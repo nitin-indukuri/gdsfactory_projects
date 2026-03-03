@@ -1,0 +1,33 @@
+# This YAML defines a simple 2:1 voltage divider using IHP rsil resistors
+instances:
+  r_top:
+    component: rsil
+    settings:
+      w: 0.5
+      l: 10
+  r_bottom:
+    component: rsil
+    settings:
+      w: 0.5
+      l: 5
+
+placements:
+  r_top:
+    x: 0
+    y: 0
+  r_bottom:
+    x: 30
+    y: 0
+
+routes:
+  divider_node:
+    links:
+      r_top,P2: r_bottom,P1
+    # Note: Use the metal layer specific to the IHP stack (e.g., Metal1)
+    settings:
+      layer: [67, 0] # Example Metal1 layer for SG13G2
+
+ports:
+  vin: r_top,P1
+  vout: r_top,P2
+  gnd: r_bottom,P2
