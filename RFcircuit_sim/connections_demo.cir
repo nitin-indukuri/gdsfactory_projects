@@ -1,0 +1,8 @@
+netlist
+.options TEMP=25
+Xq1 n1 VCC GND npn13G2 Nx=1
+Xc_in RFIN n1 cmim w=10 l=10
+Xc_out n2 RFOUT cmim w=10 l=10
+Xr_bias VBIAS n1 rsil dx=500m dy=20
+.run
+.END

@@ -105,10 +105,10 @@ pre_osdi_lines = [f"pre_osdi {os.path.join(osdi_dir, n)}" for n in osdi_files if
 if pre_osdi_lines:
     circuit.raw_spice = "\n".join([".control"] + pre_osdi_lines + [".endc"]) + "\n"
 # Convergence help for VBIC (avoids singular matrix / op failure)
-circuit.raw_spice = (circuit.raw_spice or "") + (
-    ".options gmin=1e-12 reltol=1e-2 abstol=1e-9 vntol=1e-6 cshunt=1e-12\n"
-    ".nodeset v(base2)=0.7 v(collector2)=2\n"
-)
+# circuit.raw_spice = (circuit.raw_spice or "") + (
+#     ".options gmin=1e-12 reltol=1e-2 abstol=1e-9 vntol=1e-6 cshunt=1e-12\n"
+#     ".nodeset v(base)=0.7 v(collector)=2\n"
+# )
 
 circuit.lib(pdk_lib_path, 'hbt_typ')
 circuit.lib(pdk_lib_path2, 'res_typ')
@@ -123,9 +123,9 @@ circuit.X('M1', 'npn13G2', 'collector', 'base', circuit.gnd, circuit.gnd, Nx=1)
 
 
 Vbase = circuit.V('base', '1', circuit.gnd, 1@u_V)
-circuit.R('base', 1, 'base', 1@u_kΩ)
+circuit.R('base', '1', 'base', 1@u_kΩ)
 Vcollector = circuit.V('collector', '2', circuit.gnd, 0@u_V)
-circuit.R('collector', 2, 'collector', 1@u_kΩ)
+circuit.R('collector', '2', 'collector', 1@u_kΩ)
 
 # Use subprocess backend (IHP env + stdout filter) so DC sweeps can converge
 simulator = circuit.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
@@ -141,9 +141,9 @@ ax1.grid()
 ax1.set_xlabel("Vbe [V]")
 ax1.set_ylabel("Ib [mA]")
 
+print(circuit)
 
 
-"""
 
 ## The NETLIST generation and simulation starts from here
 circuit2 = Circuit('IHP SG13G2 NMOS Test')
@@ -154,10 +154,10 @@ pre_osdi_lines = [f"pre_osdi {os.path.join(osdi_dir, n)}" for n in osdi_files if
 if pre_osdi_lines:
     circuit2.raw_spice = "\n".join([".control"] + pre_osdi_lines + [".endc"]) + "\n"
 # Convergence help for VBIC (avoids singular matrix / op failure)
-circuit2.raw_spice = (circuit2.raw_spice or "") + (
-    ".options gmin=1e-12 reltol=1e-2 abstol=1e-9 vntol=1e-6 cshunt=1e-12\n"
-    ".nodeset v(base2)=0.7 v(collector2)=2\n"
-)
+# circuit2.raw_spice = (circuit2.raw_spice or "") + (
+#     ".options gmin=1e-12 reltol=1e-2 abstol=1e-9 vntol=1e-6 cshunt=1e-12\n"
+#     ".nodeset v(base2)=0.7 v(collector2)=2\n"
+# )
 
 circuit2.lib(pdk_lib_path, 'hbt_typ')
 circuit2.lib(pdk_lib_path2, 'res_typ')
@@ -165,10 +165,11 @@ circuit2.lib(pdk_lib_path3, 'cap_typ')
 
 
 
-Ibase = circuit2.I('base', circuit2.gnd, 'base', 10@u_uA) # take care to the orientation
-circuit2.R('rb2', 'base', circuit2.gnd, 1e9)  # DC path for solver (avoids singular matrix)
-Vcollector2 = circuit2.V('collector2', 'collector', circuit2.gnd, 5)
-circuit2.X('M2', 'npn13G2', 'collector', 'base', circuit2.gnd, circuit2.gnd, Nx=1)
+Ibase = circuit2.I('base', 'base', circuit2.gnd, 10@u_uA) # take care to the orientation
+# circuit2.R('rb', 'input', 'base', 1@u_kΩ)  # DC path for solver (avoids singular matrix)
+Vcollector = circuit2.V('collector', '2', circuit2.gnd, 5)
+circuit2.R('collector', '2', 'collector', 1@u_kΩ)
+circuit2.X('M1', 'npn13G2', 'collector', 'base', circuit2.gnd, circuit2.gnd, Nx=1)
 
 # Fixme: ngspice doesn't support multi-sweep ???
 #   it works in interactive mode
@@ -186,47 +187,54 @@ ax3.set_xlabel('Vce [V]')
 ax3.set_ylabel('beta')
 ax3.axvline(x=.2, color='red')
 
-for base_current in np.arange(10, 100, 10):  # start at 10 µA (Ib=0 causes singular matrix)
-    base_current = base_current@u_uA
-    Ibase.dc_value = base_current
-    try:
-        sim = circuit2.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
-        analysis = sim.dc(Vcollector2=slice(0.1, 5, 0.1))
-        ax2.plot(analysis.collector, u_mA(-analysis.Vcollector2))
-        ax3.plot(analysis.collector, -analysis.Vcollector2 / float(base_current))
-    except Exception as e:
-        print(f"Vce sweep at Ib={float(base_current)*1e6:.0f} µA failed: {e}")
+# for base_current in np.arange(10, 100, 10):  # start at 10 µA (Ib=0 causes singular matrix)
+# Ibase.dc_value = 10@u_uA
+# base_current = 10
+# print(Ibase.dc_value)
+# print(base_current)
+# try:
+#     sim = circuit2.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
+#     analysis = sim.dc(Vcollector=slice(0.1@u_V, 5@u_V, 0.1@u_V))
+#     ax2.plot(analysis.collector, u_mA(-analysis.Vcollector))
+#     ax3.plot(analysis.collector, -analysis.Vcollector / float(base_current))
+# except Exception as e:
+#     print(f"Vce sweep at Ib={float(base_current):.0f} µA failed: {e}")
+
+print(Ibase.dc_value)
+simulation = circuit2.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
+analysis = simulation.dc(Vcollector=slice(1@u_V, 5@u_V, 0.1@u_V))
+ax2.plot(analysis.collector, u_mA(-analysis.Vcollector))
+ax3.plot(analysis.collector, -analysis.Vcollector / float(Ibase.dc_value))
 
 
 ax4.grid()
 ax4.set_xlabel('Ib [uA]')
 ax4.set_ylabel('Ic [mA]')
 
-# Ic vs Ib: sweep base current 20–200 µA, step 20 µA
-Ib_start, Ib_stop, Ib_step = 20e-6, 200e-6, 20e-6
-try:
-    sim = circuit2.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
-    analysis = sim.dc(Ibase=slice(Ib_start, Ib_stop, Ib_step))
-    try:
-        Ib_A = np.asarray(analysis.sweep)
-    except (AttributeError, KeyError):
-        Ib_A = np.arange(Ib_start, Ib_stop + Ib_step * 0.5, Ib_step)
-    Ib_uA = Ib_A * 1e6
-    try:
-        Ic = np.asarray(-analysis.Vcollector2)
-    except Exception:
-        Ic = np.asarray(analysis["i(vcollector2)"])
-    ax4.plot(Ib_uA, u_mA(Ic), "o-")
-    ax4.legend(("Ic(Ib)",), loc=(0.1, 0.8))
-except Exception as e:
-    print(f"Ic vs Ib sweep failed: {e}")
-    Ib_uA = np.arange(20, 220, 20)
-    ax4.plot(Ib_uA, np.zeros_like(Ib_uA), "x", color="gray", label="(sweep failed)")
-    ax4.legend(loc=(0.1, 0.8))
-
-"""
+# # Ic vs Ib: sweep base current 20–200 µA, step 20 µA
+# Ib_start, Ib_stop, Ib_step = 20e-6, 200e-6, 20e-6
+# try:
+#     sim = circuit2.simulator(temperature=25, nominal_temperature=25, simulator="ngspice-subprocess")
+#     analysis = sim.dc(Ibase=slice(Ib_start, Ib_stop, Ib_step))
+#     try:
+#         Ib_A = np.asarray(analysis.sweep)
+#     except (AttributeError, KeyError):
+#         Ib_A = np.arange(Ib_start, Ib_stop + Ib_step * 0.5, Ib_step)
+#     Ib_uA = Ib_A * 1e6
+#     try:
+#         Ic = np.asarray(-analysis.Vcollector)
+#     except Exception:
+#         Ic = np.asarray(analysis["i(vcollector)"])
+#     ax4.plot(Ib_uA, u_mA(Ic), "o-")
+#     ax4.legend(("Ic(Ib)",), loc=(0.1, 0.8))
+# except Exception as e:
+#     print(f"Ic vs Ib sweep failed: {e}")
+#     Ib_uA = np.arange(20, 220, 20)
+#     ax4.plot(Ib_uA, np.zeros_like(Ib_uA), "x", color="gray", label="(sweep failed)")
+#     ax4.legend(loc=(0.1, 0.8))
 
 
+print(circuit2)
 
 plt.tight_layout()
 out_file = "pyspice_test_plots.png"

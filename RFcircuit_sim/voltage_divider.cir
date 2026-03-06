@@ -1,0 +1,26 @@
+Voltage Divider with Current Measurement
+
+* Components: Name Node1 Node2 Value
+V1 1 0 DC 10V          ; Input Voltage (10V)
+R1 1 2 1k              ; Top Resistor
+R2 3 0 1k              ; Bottom Resistor
+
+* Ammeter: 0V source inserted between node 2 and 3
+Vmeas 2 3 DC 0V        
+
+* Analysis: DC sweep or operating point
+.op
+
+.control
+  run
+  
+  * Display the voltage at the divider node
+  print v(2)
+  
+  * Display the current through the dummy source
+  * Note: SPICE follows passive sign convention (current flows + to -)
+  print i(Vmeas)
+  
+.endc
+
+.end

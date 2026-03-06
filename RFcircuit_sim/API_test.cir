@@ -1,0 +1,22 @@
+API Test Circuit
+.options TEMP=25
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerRES.lib res_typ
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerCAP.lib cap_typ
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerHBT.lib hbt_typ
+XM1 out gate 0 0 sg13_lv_nmos l=130n w=149.99999999999997n ng=1
+Vsupply vdd 0 dc 5
+Rg1 vdd gate 1k
+Rg2 gate 0 1k
+XRsload vdd out 0 rsil l=100.00000000000001u w=499.99999999999994n
+XCout out 0 cap_cmim l=10.000000000000002u w=10.000000000000002u
+.op
+.control
+run
+save all
+print @n.xm1.nsg13_lv_nmos[gm]
+print @n.xm1.nsg13_lv_nmos[ids]
+print v(out)
+print v(gate)
+.endc
+.END
