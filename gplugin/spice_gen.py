@@ -1,7 +1,11 @@
 # This module provides functions to generate Ngspice SPICE code for various circuit analysis commands.
 # It includes functions for .op, .tran, .ac, .dc, .sp, and .vsrc_port.
 
-
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 
 # The function is designed for easy conversion into spice suffixes.
 
@@ -592,6 +596,289 @@ def mosfet(name, d, g, s, b, mname, m=None, l=None, w=None, ad=None, as_=None,
         line += " " + " ".join(opts)
     return line
 
+
+def hbt(name, c, b, e, bn, mname, nx=1, dtemp=0, ny=1, le=0.96e-6, we=0.12e-6,
+        el=None, selft=1, sw_nqs=0, **params):
+    """
+    HBT subcircuit instance (X-element), e.g. IHP SG13G2 four-terminal NPN.
+
+    Nodes: c=collector, b=base, e=emitter, bn=base nodule (substrate tie).
+    mname: subcircuit name from the PDK (.subckt), e.g. npn13G2 — change mname for
+    other HBT cells; extra instance parameters go through **params.
+
+    Default geometry matches typical npn13G2 (.param Nx Ny le we selft sw_nqs dtemp).
+    Pass el as a number or a string expression (e.g. \"le*1e6\") for El=.
+    """
+    if not isinstance(mname, str) or not mname.strip():
+        raise ValueError("hbt: mname (subcircuit model name) must be a non-empty string.")
+    ref = f"X{name}" if not str(name).upper().startswith("X") else name
+    line = f"{ref} {c} {b} {e} {bn} {mname}"
+    opts = []
+    if nx is not None:
+        opts.append(f"Nx={to_spice_unit(nx)}")
+    if dtemp is not None:
+        opts.append(f"dtemp={to_spice_unit(dtemp)}")
+    if ny is not None:
+        opts.append(f"Ny={to_spice_unit(ny)}")
+    if le is not None:
+        opts.append(f"le={to_spice_unit(le)}")
+    if we is not None:
+        opts.append(f"we={to_spice_unit(we)}")
+    if el is not None:
+        if isinstance(el, str):
+            opts.append(f"El={el}")
+        else:
+            opts.append(f"El={to_spice_unit(el)}")
+    if selft is not None:
+        opts.append(f"selft={to_spice_unit(selft)}")
+    if sw_nqs is not None:
+        opts.append(f"sw_nqs={to_spice_unit(sw_nqs)}")
+    for k, v in params.items():
+        opts.append(f"{k}={to_spice_unit(v)}")
+    if opts:
+        line += " " + " ".join(opts)
+    return line
+
+
+def _plot_qword(label):
+    """Quote a plot title/label for ngspice if it contains whitespace."""
+    if label is None:
+        return None
+    s = str(label)
+    if any(c in s for c in " \t\n"):
+        return f'"{s.replace(chr(34), chr(92) + chr(34))}"'
+    return s
+
+
+def plot_command(
+    *expressions,
+    plot_mode=None,
+    ylimit=None,
+    xlimit=None,
+    xindices=None,
+    xcompress=None,
+    xdelta=None,
+    ydelta=None,
+    vs=None,
+    xlabel=None,
+    ylabel=None,
+    title=None,
+    xlog=False,
+    ylog=False,
+    loglog=False,
+    nogrid=False,
+    linplot=False,
+    combplot=False,
+    pointplot=False,
+    nointerp=False,
+    noretraceplot=False,
+    samep=False,
+    linear=False,
+    polar=False,
+    smith=False,
+    smithgrid=False,
+):
+    """
+    Build an ngspice interactive ``plot`` command line (for use inside ``.control``).
+
+    General form (ngspice manual): plot exprs [ylimit ...] [xlimit ...] [vs ...]
+    [xlog] [ylog] [loglog] [xlabel ...] [ylabel ...] [title ...] [polar] [smith] ...
+
+    Parameters
+    ----------
+    *expressions : str
+        One or more vector names or expressions, e.g. ``"db(v(out))"``, ``"ph(v(out))"``.
+        For names with special characters, pass a quoted string, e.g. ``'"/vout"'``.
+    plot_mode : str, optional
+        Instead of expressions, use a bulk mode: ``"all"``, ``"ally"``, ``"alli"``, or ``"allv"``.
+    ylimit, xlimit : tuple of (low, high), optional
+        Axis limits; numeric values are passed through ``to_spice_unit``.
+    xindices : tuple (i_lo, i_hi), optional
+        1-based index range of points to plot.
+    xcompress : int, optional
+        Plot one of every *xcompress* points.
+    xdelta, ydelta : optional
+        Grid line spacing (numbers or strings).
+    vs : str, optional
+        X-axis scale expression (e.g. ``"frequency"`` for AC).
+    xlabel, ylabel, title : str, optional
+        Axis/window labels; quoted automatically if they contain spaces.
+    xlog, ylog, loglog : bool
+        Logarithmic axes.
+    nogrid, linplot, combplot, pointplot, nointerp, noretraceplot, samep, linear : bool
+        Style and behavior flags (see ngspice ``plot`` documentation).
+    polar, smith, smithgrid : bool
+        Polar / Smith chart modes (mutually exclusive usage per ngspice rules).
+    """
+    valid_modes = {"all", "ally", "alli", "allv"}
+    if plot_mode is not None:
+        pm = str(plot_mode).lower()
+        if pm not in valid_modes:
+            raise ValueError(f"plot_mode must be one of {sorted(valid_modes)}, got {plot_mode!r}")
+        if expressions:
+            raise ValueError("Do not pass both plot_mode and expressions.")
+        parts = ["plot", pm]
+    else:
+        if not expressions:
+            raise ValueError("plot_command: pass at least one expression, or use plot_mode=.")
+        parts = ["plot"] + [str(e) for e in expressions]
+
+    def add_limit(name, lim):
+        if lim is None:
+            return
+        if not (isinstance(lim, (list, tuple)) and len(lim) == 2):
+            raise ValueError(f"{name} must be a (low, high) pair")
+        lo, hi = lim
+        parts.extend(
+            [
+                name,
+                to_spice_unit(lo) if not isinstance(lo, str) else lo,
+                to_spice_unit(hi) if not isinstance(hi, str) else hi,
+            ]
+        )
+
+    add_limit("ylimit", ylimit)
+    add_limit("xlimit", xlimit)
+
+    if xindices is not None:
+        if not (isinstance(xindices, (list, tuple)) and len(xindices) == 2):
+            raise ValueError("xindices must be (i_lo, i_hi)")
+        i0, i1 = xindices
+        parts.extend(["xindices", str(int(i0)), str(int(i1))])
+
+    if xcompress is not None:
+        parts.extend(["xcompress", str(int(xcompress))])
+
+    if xdelta is not None:
+        parts.extend(
+            [
+                "xdelta",
+                to_spice_unit(xdelta) if not isinstance(xdelta, str) else xdelta,
+            ]
+        )
+    if ydelta is not None:
+        parts.extend(
+            [
+                "ydelta",
+                to_spice_unit(ydelta) if not isinstance(ydelta, str) else ydelta,
+            ]
+        )
+
+    _plot_flags = (
+        ("xlog", xlog),
+        ("ylog", ylog),
+        ("loglog", loglog),
+        ("nogrid", nogrid),
+        ("linplot", linplot),
+        ("combplot", combplot),
+        ("pointplot", pointplot),
+        ("nointerp", nointerp),
+        ("noretraceplot", noretraceplot),
+        ("samep", samep),
+        ("linear", linear),
+        ("polar", polar),
+        ("smith", smith),
+        ("smithgrid", smithgrid),
+    )
+    for name, on in _plot_flags:
+        if on:
+            parts.append(name)
+
+    if vs is not None:
+        parts.extend(["vs", str(vs)])
+
+    if xlabel is not None:
+        qw = _plot_qword(xlabel)
+        parts.extend(["xlabel", qw])
+    if ylabel is not None:
+        parts.extend(["ylabel", _plot_qword(ylabel)])
+    if title is not None:
+        parts.extend(["title", _plot_qword(title)])
+
+    return " ".join(parts)
+
+
+_AMPLIFIER_WRITE_VECTORS = (
+    "S_1_1 Y_1_1 Z_1_1 Cy_1_1 S_1_2 Y_1_2 Z_1_2 Cy_1_2 "
+    "S_2_1 Y_2_1 Z_2_1 Cy_2_1 S_2_2 Y_2_2 Z_2_2 Cy_2_2 Rn NF SOpt NFmin num den Gmax Fmax "
+    "s11_db s12_db s21_db s22_db s11_mag s11_conj s12_mag s12_conj s21_mag s21_conj s22_mag "
+    "s22_conj delta delta_mag kf mu muprime"
+)
+
+_AMPLIFIER_LET_LINES = (
+    "let num = (1/4)*(abs(v(y_2_1)-v(y_1_2))*abs(v(y_2_1)-v(y_1_2)))",
+    "let den = real(v(y_1_1))*real(v(y_2_2))-real(v(y_2_1))*real(v(y_1_2))",
+    "let Gmax = num/den",
+    "let Fmax = sqrt(mag(Gmax))*frequency",
+    "let s11_db = db(v(s_1_1))",
+    "let s12_db = db(v(s_1_2))",
+    "let s21_db = db(v(s_2_1))",
+    "let s22_db = db(v(s_2_2))",
+    "let s11_mag = mag(v(s_1_1))",
+    "let s11_conj = conj(v(s_1_1))",
+    "let s12_mag = mag(v(s_1_2))",
+    "let s12_conj = conj(v(s_1_2))",
+    "let s21_mag = mag(v(s_2_1))",
+    "let s21_conj = conj(v(s_2_1))",
+    "let s22_mag = mag(v(s_2_2))",
+    "let s22_conj = conj(v(s_2_2))",
+    "let delta = v(s_1_1)*v(s_2_2)-v(s_1_2)*v(s_2_1)",
+    "let delta_mag = mag(delta)",
+    "let kf = (1-s11_mag*s11_mag-s22_mag*s22_mag+delta_mag*delta_mag)/(2*mag(v(s_1_2)*v(s_2_1)))",
+    "let mu = (1-s11_mag*s11_mag)/(mag(v(s_2_2)-delta*s11_conj)+mag(v(s_1_2)*v(s_2_1)))",
+    "let muprime = (1-s22_mag*s22_mag)/(mag(v(s_1_1)-delta*s22_conj)+mag(v(s_1_2)*v(s_2_1)))",
+)
+
+
+def amplifier_plots(
+    netlist,
+    *,
+    write_raw: str = "spice4qucs.sp1.plot",
+    sp_points: int = 401,
+    sp_fstart=0.1e9,
+    sp_fstop=100e9,
+    sp_noise: int = 1,
+    add_default_plot: bool = True,
+    plot_expressions=("s11_db", "s22_db", "s21_db"),
+    plot_ylimit=(-40, 20),
+    plot_extra=None,
+):
+    """
+    Append RF two-port style ``.control`` content: ``SP LIN`` sweep, stability / NF / S lets,
+    ``write`` of the usual vector set, and optionally a default ``plot`` of S-parameters in dB.
+
+    Call **after** ``netlist.write_text(".control")`` (and optional blank line). You still add
+    ``exit`` / ``.endc`` / ``.END`` yourself.
+
+    Parameters
+    ----------
+    write_raw
+        Filename passed to ngspice ``write`` (raw plot file).
+    sp_points, sp_fstart, sp_fstop, sp_noise
+        ``SP LIN <np> <fstart> <fstop> <noise>`` (noise 0 or 1).
+    add_default_plot
+        If True, append ``plot`` for ``plot_expressions`` with ``plot_ylimit`` and ``plot_extra``.
+    plot_expressions
+        Traces for the default ``plot`` command.
+    plot_ylimit
+        Passed to :func:`plot_command` as ``ylimit=`` (ignored if ``add_default_plot`` is False).
+    plot_extra
+        Optional dict of extra kwargs for :func:`plot_command` (e.g. ``xlog=True``).
+    """
+    netlist.write_text(
+        f"SP LIN {int(sp_points)} {to_spice_unit(sp_fstart)} "
+        f"{to_spice_unit(sp_fstop)} {int(sp_noise)}"
+    )
+    for line in _AMPLIFIER_LET_LINES:
+        netlist.write_text(line)
+    netlist.write_text(f"write {write_raw} {_AMPLIFIER_WRITE_VECTORS}")
+    if add_default_plot:
+        pk = {"ylimit": plot_ylimit}
+        if plot_extra:
+            pk.update(plot_extra)
+        netlist.add_plot_command(*plot_expressions, **pk)
+
+
 # ==============================================================================
 
 class SpiceNetlist:
@@ -609,6 +896,31 @@ class SpiceNetlist:
         """Manually add a raw string or comment."""
         self.contents.append(text)
 
+    def add_plot_command(self, *expressions, **kwargs):
+        """
+        Append one ngspice ``plot`` command (see :func:`plot_command`).
+
+        Example::
+
+            circuit.write_text(".control")
+            circuit.add_plot_command(
+                "db(v(s_2_1))", "db(v(s_1_1))",
+                vs="frequency",
+                xlog=True,
+                ylimit=(-40, 5),
+                xlabel="Hz",
+                ylabel="dB",
+            )
+            circuit.write_text(".endc")
+        """
+        line = plot_command(*expressions, **kwargs)
+        if line:
+            self.contents.append(line)
+
+    def add_amplifier_plots(self, **kwargs):
+        """Append :func:`amplifier_plots` lines to this netlist (inside ``.control``)."""
+        amplifier_plots(self, **kwargs)
+
     def print_netlist(self):
         """Print the netlist contents to stdout."""
         print("\n".join(self.contents))
@@ -619,13 +931,74 @@ class SpiceNetlist:
             f.write("\n".join(self.contents))
         print(f"Netlist saved to {self.filename}")
 
-import subprocess
+    def has_ngspice_plot_command(self) -> bool:
+        """True if this netlist includes a ``plot`` line in ``.control`` (see :func:`netlist_has_ngspice_plot_command`)."""
+        return netlist_has_ngspice_plot_command(self.contents)
 
-def run_sim(filename, quiet=True):
-    """Run ngspice in batch mode on the netlist file.
-    If quiet=True (default), suppress ngspice stdout/stderr (no model dump or stats)."""
-    kwargs = {}
+
+_PLOT_CMD_LINE = re.compile(r"^plot(\s|$)", re.IGNORECASE)
+
+
+def netlist_has_ngspice_plot_command(netlist: str | list[str]) -> bool:
+    """
+    True if the netlist contains an interactive ``plot`` command inside ``.control`` … ``.endc``.
+
+    Skips comment lines (leading ``*``). Matches ``plot ...`` / ``plot all`` etc., not ``hardcopy``.
+    """
+    if isinstance(netlist, list):
+        text = "\n".join(netlist)
+    else:
+        text = netlist
+    in_control = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("*"):
+            continue
+        low = line.lower()
+        if low.startswith(".control"):
+            in_control = True
+            continue
+        if low.startswith(".endc"):
+            in_control = False
+            continue
+        if in_control and _PLOT_CMD_LINE.match(line):
+            return True
+    return False
+
+
+def run_sim(filename, quiet=None, cwd=None):
+    """Run ngspice on the netlist file.
+
+    quiet: If True, suppress ngspice stdout/stderr. If False, show them. If None (default),
+    use quiet=False when the netlist contains a ``plot`` command (interactive graphics), else True.
+
+    When ``plot`` is used and quiet is False, ngspice is run as ``ngspice -i <file>`` (interactive),
+    ``DISPLAY`` defaults to ``:0`` on Linux if unset (WSLg), and the child inherits stdio without
+    closing all fds so X11/Wayland can open plot windows from Python/IDE launches.
+
+    cwd: optional working directory for ngspice (affects relative ``write`` / include paths)."""
+    path = Path(filename).resolve()
+    path_str = str(path)
+    if quiet is None:
+        try:
+            text = path.read_text(errors="replace")
+            quiet = not netlist_has_ngspice_plot_command(text)
+        except OSError:
+            quiet = True
+    cmd = ["ngspice", path_str]
+    if not quiet:
+        cmd.insert(1, "-i")
+    kwargs: dict = {}
     if quiet:
         kwargs["stdout"] = subprocess.DEVNULL
         kwargs["stderr"] = subprocess.DEVNULL
-    subprocess.run(["ngspice", "-b", filename], **kwargs)
+    if cwd is not None:
+        kwargs["cwd"] = str(Path(cwd).resolve())
+    if not quiet:
+        env = os.environ.copy()
+        if sys.platform == "linux" and not (env.get("DISPLAY") or "").strip():
+            env["DISPLAY"] = ":0"
+        env.pop("MPLBACKEND", None)
+        kwargs["env"] = env
+        kwargs["close_fds"] = False
+    subprocess.run(cmd, **kwargs)

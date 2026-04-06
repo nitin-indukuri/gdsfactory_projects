@@ -1,0 +1,56 @@
+* 40G HBT PA output match (generated from RFampcir.cir reference)
+.include /foss/tools/qucs-s/share/qucs-s/xspice_cmlib/include/ngspice_mathfunc.inc
+.SUBCKT IHP_PDK_nonlinear_components_npn13G2 gnd c b e bn Nx=1
+X1 c b e bn npn13G2 Nx={Nx}
+.ENDS
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerHBT.lib hbt_typ
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerRES.lib res_wcs
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerCAP.lib cap_typ
+.lib /home/nindukuri/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
+VPr1 _net0 _net1 dc 0
+VP1 _net2 0 dc 0 ac 158.866m sin(0 158.866m 3g 0 0) portnum 1 z0 50
+V1 _net5 0 dc 1.65
+V2 _net6 0 dc 970m
+Xnpn13G1 0 _net1 _net7 0 0 IHP_PDK_nonlinear_components_npn13G2 Nx=10
+R1 _net8 _net7 881.5 tc1=0.0 tc2=0.0
+C2 _net8 _net7 32f
+VP2 _net4 0 dc 0 ac 632.456m sin(0 632.456m 1meg 0 0) portnum 2 z0 50
+L2 _net6 _net8 395.1p
+C3 _net9 _net8 9.103f
+C4 _net2 _net9 34.427f
+C5 _net3 _net4 116.569f
+L4 _net0 _net5 119.15199999999999p
+L5 _net1 _net3 168.944p
+L3 0 _net9 293.55p
+
+.control
+
+.sp lin 401 100meg 100g 1
+let num = (1/4)*(abs(v(y_2_1)-v(y_1_2))*abs(v(y_2_1)-v(y_1_2)))
+let den = real(v(y_1_1))*real(v(y_2_2))-real(v(y_2_1))*real(v(y_1_2))
+let Gmax = num/den
+let Fmax = sqrt(mag(Gmax))*frequency
+let s11_db = db(v(s_1_1))
+let s12_db = db(v(s_1_2))
+let s21_db = db(v(s_2_1))
+let s22_db = db(v(s_2_2))
+let s11_mag = mag(v(s_1_1))
+let s11_conj = conj(v(s_1_1))
+let s12_mag = mag(v(s_1_2))
+let s12_conj = conj(v(s_1_2))
+let s21_mag = mag(v(s_2_1))
+let s21_conj = conj(v(s_2_1))
+let s22_mag = mag(v(s_2_2))
+let s22_conj = conj(v(s_2_2))
+let delta = v(s_1_1)*v(s_2_2)-v(s_1_2)*v(s_2_1)
+let delta_mag = mag(delta)
+let kf = (1-s11_mag*s11_mag-s22_mag*s22_mag+delta_mag*delta_mag)/(2*mag(v(s_1_2)*v(s_2_1)))
+let mu = (1-s11_mag*s11_mag)/(mag(v(s_2_2)-delta*s11_conj)+mag(v(s_1_2)*v(s_2_1)))
+let muprime = (1-s22_mag*s22_mag)/(mag(v(s_1_1)-delta*s22_conj)+mag(v(s_1_2)*v(s_2_1)))
+write spice4qucs.sp1.plot S_1_1 Y_1_1 Z_1_1 Cy_1_1 S_1_2 Y_1_2 Z_1_2 Cy_1_2 S_2_1 Y_2_1 Z_2_1 Cy_2_1 S_2_2 Y_2_2 Z_2_2 Cy_2_2 Rn NF SOpt NFmin num den Gmax Fmax s11_db s12_db s21_db s22_db s11_mag s11_conj s12_mag s12_conj s21_mag s21_conj s22_mag s22_conj delta delta_mag kf mu muprime
+destroy all
+reset
+
+exit
+.endc
+.END

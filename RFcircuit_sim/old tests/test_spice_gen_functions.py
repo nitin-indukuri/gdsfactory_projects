@@ -1,16 +1,16 @@
 """
 Tests for gplugin.spice_gen module.
 Run all tests by executing this file:
-  python RFcircuit_sim/test_spice_gen.py   (from repo root)
-  python test_spice_gen.py                 (from RFcircuit_sim/)
-Or: pytest RFcircuit_sim/test_spice_gen.py -v
+  python "RFcircuit_sim/old tests/test_spice_gen_functions.py"   (from repo root)
+  python test_spice_gen_functions.py                 (from RFcircuit_sim/old tests/)
+Or: pytest "RFcircuit_sim/old tests/test_spice_gen_functions.py" -v
 """
 import os
 import sys
 import pytest
 
 # Project root (parent of RFcircuit_sim) so gplugin can be imported from any cwd
-_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 

@@ -18,10 +18,14 @@ COMPONENT_PORTS = {
     "bend_circular": ["o1", "o2"],
     "mmi1x2": ["o1", "o2", "o3"],
     "mmi2x2": ["o1", "o2", "o3", "o4"],
-    "straight": ["o1", "o2"],
+    # IHP ``straight`` (RF interconnect): electrical ports e1, e2
+    "straight": ["e1", "e2"],
+    # IHP ``inductor2`` with turns==1: two terminals P1, P2
+    "inductor2": ["P1", "P2"],
     "rsil": ["P1", "P2"],
     "cmim": ["PLUS", "MINUS"],
-    "npn13G2": ["B", "C", "E"],
+    # Match IHP / yml_spice_plugin SPICE node order (collector, base, emitter)
+    "npn13G2": ["C", "B", "E"],
 }
 
 
@@ -98,9 +102,10 @@ def _build_nets(connections, routes, ports):
     for left, right in _collect_link_pairs(connections, routes):
         merge(left, right)
 
+    # Tag the union root with the external port name. Do not assign parent[pair]=pair here:
+    # that would reset the pair and break merges from connections (e.g. q1,E with l3,P2).
     for port_name, loc in (ports or {}).items():
         pair = _parse_connection(loc)
-        parent[pair] = pair
         root = get_root(pair)
         parent[root] = ("port", port_name)
 
@@ -176,7 +181,15 @@ def yaml_to_spice_netlist(
         settings = inst_data.get("settings") or {}
         port_list = port_map.get(comp)
         if not port_list:
-            port_list = ["o1", "o2"] if "bend" in comp or "straight" in comp else ["o1", "o2", "o3"]
+            cl = (comp or "").lower()
+            if "straight" in cl:
+                port_list = ["e1", "e2"]
+            elif "inductor2" in cl:
+                port_list = ["P1", "P2"]
+            elif "bend" in cl:
+                port_list = ["o1", "o2"]
+            else:
+                port_list = ["o1", "o2", "o3"]
         node_list = []
         for p in port_list:
             key = (inst_name, p)
@@ -189,8 +202,36 @@ def yaml_to_spice_netlist(
     return circuit
 
 
+def prepare_yaml_dict_for_gdsfactory_layout(data: dict) -> dict:
+    """
+    Deep-copy *data* and expand ``connections:`` into ``routes:`` with ``bridge_strategy``
+    (see :func:`gplugin.yml_spice_plugin.expand_connections_to_bridge_routes`).
+    """
+    import copy
+
+    from gplugin.yml_spice_plugin import expand_connections_to_bridge_routes
+
+    return expand_connections_to_bridge_routes(copy.deepcopy(data))
+
+
+def load_yaml_prepared_for_gdsfactory_layout(path: str):
+    """
+    Load a YAML file and return netlist dict(s) ready for ``gf.read.from_yaml`` with IHP bridge routing.
+    """
+    import copy
+
+    import yaml
+    from gplugin.yml_spice_plugin import expand_connections_to_bridge_routes
+
+    with open(path, "r") as f:
+        d = yaml.safe_load(f)
+    if isinstance(d, list):
+        return [expand_connections_to_bridge_routes(copy.deepcopy(x)) for x in d]
+    return expand_connections_to_bridge_routes(copy.deepcopy(d))
+
+
 if __name__ == "__main__":
-    # Example: convert the connections_demo YAML (inline)
+    # Example YAML (used if RFcircuit_sim sample is missing)
     demo_yaml = """
 name: connections_demo
 instances:
@@ -219,9 +260,15 @@ ports:
   o2: mmi_long,o2
   o3: mmi_long,o3
 """
-    with open("circuit.yaml", "r") as f:
-        data = yaml.safe_load(f)
-
-    # data = yaml.safe_load(circuit.yaml)
-    circ = yaml_to_spice_netlist(data, out_path="connections_demo.cir")
+    _example_dir = os.path.join(_root, "RFcircuit_sim", "old tests")
+    _example_yaml = os.path.join(_example_dir, "circuit.yaml")
+    _example_out = os.path.join(_example_dir, "connections_demo.cir")
+    if os.path.isfile(_example_yaml):
+        with open(_example_yaml, "r") as f:
+            data = yaml.safe_load(f)
+        out_path = _example_out
+    else:
+        data = yaml.safe_load(demo_yaml)
+        out_path = os.path.join(_root, "connections_demo.cir")
+    circ = yaml_to_spice_netlist(data, out_path=out_path)
     circ.print_netlist()

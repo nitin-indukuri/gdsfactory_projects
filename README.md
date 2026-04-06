@@ -15,22 +15,20 @@
     * Includes numerous GDS variations exported from the Docker environment.
 * **Modeling:** Features a SAX Model of the PMOS transistor located in `saxmodel.py`.
 
-### Project 3: RF Circuit Design (In Progress)
-* **Setup:** Manual installation of IHP PDK and NGSPICE with configured environment variables.
-* **Verification:** Verified **PySpice** functionality via `voltage_divider_ex.py`.
-* **YAML Workflow:**
-    * Testing `yamltest.py` to generate KLayout GDS from YAML files.
-    * *Note:* Using custom routing strategies to bypass GDSFactory IHP PDK integration bugs.
-* **Simulations:** Currently debugging `IHP_HBT_DC_curves.py`. 
-    * **Status:** $V_{be}$ vs $I_c$ curve is functional; other curves are pending.
+### Project 3: RF Circuit Design
+* **Setup:** IHP PDK + ngspice; env (`PDK_ROOT`, `PDK`) for model `.lib` paths.
+* **Folder `RFcircuit_sim/`:** 40 GHz PA example — `40G_amp.yaml` (instances, connections, placements), scripts to emit ngspice `.cir` (PDK passives vs ideal `R`/`C`/`L`), optional KLayout preview, and a short folder README. See that README for commands.
+* **Earlier checks:** PySpice smoke test (`voltage_divider_ex.py`); legacy `old tests/` YAML/GDS experiments and routed-layout workarounds where IHP routing mismatched widths.
 
 ### Project 4: RF Models
-* **Status:** Pending.
-* **Goal:** Development of an RF model (e.g., LC oscillator or Josephson Junction Model) once PySpice RF simulations are stabilized.
+* **Status:** Finished
+* **Goal:** Development of an RF model for LC Josephson Junction (Details in the LC_joseph_model folder)
 
-### Project 5: Tool Interface & Extensions
-* **Current Task:** Developing a plugin to convert GDSFactory YAML files directly to PySpice netlists.
-* **Status:** Logic is nearly complete; being tested concurrently with Project 3.
+### Project 5: Tool Interface & Extensions (`gplugin/`)
+* **`spice_gen`:** ngspice line helpers (libs, HBT, passives, Qucs-style RF ports, `amplifier_plots` / S-parameter control block).
+* **`yml_spice_plugin`:** YAML netlist → flat ngspice deck (IHP devices + port-based stimulus); optional ideal passives; union-find fix for `ports`/`connections` in `yaml_myAPI`.
+* **`yaml_myAPI` / `ihp_yaml_bridge`:** Prepare YAML for gdsfactory layout (bridged routing). **`ngspice_raw_plot`:** plot `spice4qucs` raw output.
+* **Usage:** Consumed by `RFcircuit_sim` generators; repo root on `PYTHONPATH` when running scripts.
 
 ---
 

@@ -1,0 +1,151 @@
+# 40 GHz HBT PA — gdsfactory-style YAML matching topology of RFamp_gen.cir / 40G_Amp.py
+#
+# SPICE reference (RFamp_gen.cir):
+#   Xnpn13G1: C=_net1, B=_net7, E=0
+#   R1 881.5 Ω: _net8–_net7 | C2 32 fF: _net8–_net7 | L2 395.1 pH: _net6–_net8
+#   C3 9.103 fF: _net9–_net8 | C4 34.427 fF: _net2–_net9 | C5 116.569 fF: _net3–_net4
+#   L4 119.152 pH: _net0–_net5 | L5 168.944 pH: _net1–_net3 | L3 293.55 pH: 0–_net9
+#   L4 P1 tied to collector _net1 (RF reference used VPr1 _net0–_net1 dc 0) | VP1: _net2–0 | VP2: _net4–0
+#   V1 1.65 V: _net5–0 | V2 0.97 V: _net6–0
+#
+# L2–L5: IHP ``inductor2`` (``turns: 1`` → ports P1, P2). ``inductance`` matches RFamp L targets (H);
+# geometry (width, space, diameter, …) must be tuned for EM/LVS. Tune cmim/rsil for fF / Ω.
+
+name: rf_amp_40g_pa
+
+instances:
+  q1:
+    component: npn13G2
+    settings:
+      Nx: 10
+
+  r1:
+    component: rsil
+    settings:
+      dx: 8.0
+      dy: 2.0
+
+  c2:
+    component: cmim
+    settings:
+      w: 4.0
+      l: 4.0
+
+  c3:
+    component: cmim
+    settings:
+      w: 2.0
+      l: 2.0
+
+  c4:
+    component: cmim
+    settings:
+      w: 3.0
+      l: 3.0
+
+  c5:
+    component: cmim
+    settings:
+      w: 5.0
+      l: 5.0
+
+  l2:
+    component: inductor2
+    settings:
+      turns: 1
+      inductance: 3.951e-10
+      width: 2.0
+      space: 2.1
+      diameter: 22.0
+
+  l3:
+    component: inductor2
+    settings:
+      turns: 1
+      inductance: 2.9355e-10
+      width: 2.0
+      space: 2.1
+      diameter: 18.0
+
+  l4:
+    component: inductor2
+    settings:
+      turns: 1
+      inductance: 1.19152e-10
+      width: 2.0
+      space: 2.1
+      diameter: 14.0
+
+  l5:
+    component: inductor2
+    settings:
+      turns: 1
+      inductance: 1.68944e-10
+      width: 2.0
+      space: 2.1
+      diameter: 16.0
+
+# Placement grid (~250 µm step) so device bounding boxes do not overlap in layout; tune per PDK bbox.
+placements:
+  q1:
+    x: 0
+    y: 0
+  r1:
+    x: -50
+    y: 0
+  c2:
+    x: -50
+    y: -50
+  c3:
+    x: -200
+    y: 0
+  c4:
+    x: -350
+    y: 0
+  c5:
+    x: 100
+    y: 0
+  l2:
+    x: -150
+    y: -100
+  l3:
+    x: -300
+    y: -100
+  l4:
+    x: 0
+    y: 100
+  l5:
+    x: 50
+    y: 0
+
+# Use list values where one inst,port ties to multiple others (duplicate YAML keys overwrite).
+connections:
+  # Base (_net7): R || C to base
+  q1,B:
+    - r1,P2
+    - c2,MINUS
+  # Bias / match (_net8) and V2 side (_net6)
+  r1,P1:
+    - c2,PLUS
+    - l2,P2
+    - c3,MINUS
+  # Input / shunt path (_net9, _net2)
+  c3,PLUS:
+    - c4,MINUS
+    - l3,P1
+  # Collector rail: L4 P1, BJT collector, L5 P1 (same net; RF reference used VPr1 dc 0 between nodes)
+  l4,P1: q1,C
+  q1,C: l5,P1
+  # Output network (_net3–_net4)
+  l5,P2: c5,PLUS
+  # Ground: emitter and L3 (shunt _net9 to GND)
+  q1,E: l3,P2
+
+ports:
+  # RF ports (VP1+ / VP2+ in SPICE); grounds are common GND
+  RF_IN: c4,PLUS
+  RF_OUT: c5,MINUS
+  # Bias supplies (V1+ / V2+)
+  VDD_165: l4,P2
+  VDD_097: l2,P1
+  GND: q1,E

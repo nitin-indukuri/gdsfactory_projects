@@ -281,12 +281,16 @@ new_routing_strategies: RoutingStrategies = {
 # Ensure gplugin (sibling of RFcircuit_sim) is importable
 import os
 import sys
-_gplugin_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_gplugin_parent = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 if _gplugin_parent not in sys.path:
     sys.path.insert(0, _gplugin_parent)
 from gplugin.yml_spice_plugin import *
 
 if __name__ == "__main__":
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(_script_dir)
     # 2. Read the YAML file (pass custom strategies so YAML can use routing_strategy: bridge_strategy)
     component = gf.read.from_yaml("circuit.yaml", routing_strategies=new_routing_strategies)
 
